@@ -65,8 +65,12 @@ function initInfo() {
     });
 }
 
-function reboot() {
-    exec('/system/bin/svc power reboot || /system/bin/reboot');
+async function reboot(reason = "") {
+    if (reason === "recovery") {
+        // KEYCODE_POWER = 26, hide incorrect "Factory data reset" message
+        await exec("/system/bin/input keyevent 26");
+    }
+    exec(`/system/bin/svc power reboot ${reason} || /system/bin/reboot ${reason}`);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -126,6 +130,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     patchTextField.addEventListener('focus', () => {
         const pageContent = patchTextField.closest('.page-content');
         pageContent.scrollTo({ top: pageContent.scrollHeight, behavior: 'smooth' });
+    });
+
+    // reboot
+    const rebootMenu = document.getElementById('reboot-menu');
+    document.getElementById('reboot-btn').onclick = () => {
+        rebootMenu.open = !rebootMenu.open;
+    }
+    rebootMenu.querySelectorAll('md-menu-item').forEach(item => {
+        item.onclick = () => {
+            reboot(item.getAttribute('data-reason'));
+        }
     });
     document.getElementById('reboot-fab').onclick = () => reboot();
 
