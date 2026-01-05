@@ -47,7 +47,7 @@ echo "- Unpacking boot image"
 magiskboot unpack "$BOOTIMAGE" >/dev/null 2>&1
   if [ $? -ne 0 ]; then
     >&2 echo "- Unpack error: $?"
-    exit $?
+    exit 1
   fi
 fi
 
@@ -55,7 +55,7 @@ if [ ! $(kptools -i kernel -f | grep CONFIG_KALLSYMS=y) ]; then
 	echo "- Patcher has Aborted!"
 	echo "- APatch requires CONFIG_KALLSYMS to be Enabled."
 	echo "- But your kernel seems NOT enabled it."
-	exit 0
+	exit 1
 fi
 
 if [  $(kptools -i kernel -l | grep patched=false) ]; then
@@ -74,7 +74,7 @@ set +x
 
 if [ $patch_rc -ne 0 ]; then
   >&2 echo "- Patch kernel error: $patch_rc"
-  exit $?
+  exit 1
 fi
 
 echo "- Repacking boot image"
@@ -88,7 +88,7 @@ fi
 
 if [ $? -ne 0 ]; then
   >&2 echo "- Repack error: $?"
-  exit $?
+  exit 1
 fi
 
 if [ "$FLASH_TO_DEVICE" = "true" ]; then
@@ -98,7 +98,7 @@ if [ "$FLASH_TO_DEVICE" = "true" ]; then
     flash_image new-boot.img "$BOOTIMAGE"
     if [ $? -ne 0 ]; then
       >&2 echo "- Flash error: $?"
-      exit $?
+      exit 1
     fi
   fi
 

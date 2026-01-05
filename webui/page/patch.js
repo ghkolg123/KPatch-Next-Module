@@ -324,6 +324,11 @@ async function embedKPM() {
 function patch(type) {
     const superkeyVal = document.querySelector('#superkey md-outlined-text-field').value;
     const terminal = document.querySelector('#patch-terminal');
+    const pageContent = terminal.closest('.page-content');
+    const onOutput = (data) => {
+        terminal.innerHTML += `<div>${data}</div>`;
+        pageContent.scrollTo({ top: pageContent.scrollHeight, behavior: 'smooth' });
+    };
 
     if (!bootDev) {
         terminal.textContent = 'Error: No boot image found.';
@@ -359,21 +364,17 @@ function patch(type) {
         args.push(`${modDir}/boot_unpatch.sh`, bootDev);
     }
 
-    const process = spawn(`busybox`, args,
+    const process = spawn(
+        `busybox`,
+        args,
         {
             cwd: `${modDir}/tmp`,
             env: {
                 PATH: `${modDir}/bin:/data/adb/ksu/bin:/data/adb/magisk:$PATH`,
                 ASH_STANDALONE: '1'
             }
-        });
-
-    const pageContent = terminal.closest('.page-content');
-    const onOutput = (data) => {
-        terminal.innerHTML += `<div>${data}</div>`;
-        pageContent.scrollTo({ top: pageContent.scrollHeight, behavior: 'smooth' });
-    };
-
+        }
+    );
     process.stdout.on('data', onOutput);
     process.stderr.on('data', onOutput);
     process.on('exit', (code) => {
