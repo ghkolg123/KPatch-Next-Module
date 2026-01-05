@@ -274,10 +274,26 @@ body {
     color: var(--md-sys-color-on-surface-variant);
 }
 
+.module-card .flex-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.header-info {
+    flex: 1;
+    min-width: 0;
+}
+
 .module-card-content {
     padding: 16px 0;
     font-size: 0.8em;
     color: var(--md-sys-color-outline);
+}
+
+.module-card-content md-linear-progress {
+    width: 100%;
 }
 
 .module-card-actions {
@@ -289,12 +305,6 @@ body {
 
 .module-card-actions md-filled-tonal-icon-button {
     --md-filled-tonal-icon-button-container-width: 64px;
-}
-
-.module-card .tag-wrapper {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
 }
 
 .app-item .tag-wrapper {

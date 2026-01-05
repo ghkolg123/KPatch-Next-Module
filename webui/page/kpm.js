@@ -1,4 +1,4 @@
-import { exec, toast } from 'kernelsu-alt';
+import { exec, spawn, toast } from 'kernelsu-alt';
 import { modDir, persistDir, superkey } from '../index.js';
 
 let allKpms = [];
@@ -147,7 +147,41 @@ async function renderKpmList() {
     });
 }
 
-async function handleFileUpload(accept, containerId, onLoaded) {
+async function uploadFile(file, targetPath, onProgress, signal) {
+    const CHUNK_SIZE = 96 * 1024; // 96KB chunks
+    let offset = 0;
+
+    await exec(`mkdir -p "$(dirname "${targetPath}")" && : > "${targetPath}"`);
+
+    while (offset < file.size) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        const chunk = file.slice(offset, offset + CHUNK_SIZE);
+        const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(chunk);
+        });
+
+        const result = await new Promise((resolve, reject) => {
+            const child = spawn(`echo '${base64}' | base64 -d >> "${targetPath}"`);
+            child.on('exit', (code) => {
+                if (code === 0) resolve({ errno: 0 });
+                else resolve({ errno: code, stderr: `Exit code ${code}` });
+            });
+            child.on('error', (err) => reject(err));
+        });
+
+        if (result.errno !== 0) {
+            throw new Error(result.stderr || 'Write error');
+        }
+
+        offset += CHUNK_SIZE;
+        if (onProgress) onProgress(Math.min(offset, file.size) / file.size);
+    }
+}
+
+async function handleFileUpload(accept, containerId, onSelected) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
@@ -160,14 +194,18 @@ async function handleFileUpload(accept, containerId, onLoaded) {
             return;
         }
 
-        const reader = new FileReader();
-
+        const abortController = new AbortController();
         const loadingCard = document.createElement('div');
         loadingCard.className = 'card module-card';
         loadingCard.innerHTML = `
-            <div class="module-card-header">
-                <div class="module-card-title">Uploading ${file.name}</div>
-                <div class="module-card-subtitle">Please wait...</div>
+            <div class="module-card-header flex-header">
+                <div class="header-info">
+                    <div class="module-card-title">${file.name}</div>
+                    <div class="module-card-subtitle" id="upload-progress-text">Please wait...</div>
+                </div>
+                <md-outlined-icon-button id="cancel-upload">
+                    <md-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></md-icon>
+                </md-outlined-icon-button>
             </div>
             <div class="module-card-content">
                 <md-linear-progress indeterminate></md-linear-progress>
@@ -176,35 +214,43 @@ async function handleFileUpload(accept, containerId, onLoaded) {
         const container = document.getElementById(containerId);
         container.prepend(loadingCard);
 
-        reader.onabort = () => loadingCard.remove();
-        reader.onerror = () => {
-            loadingCard.remove();
-            toast('Failed to read file');
+        const progressBar = loadingCard.querySelector('md-linear-progress');
+        const progressText = loadingCard.querySelector('#upload-progress-text');
+        const cancelBtn = loadingCard.querySelector('#cancel-upload');
+
+        cancelBtn.onclick = () => {
+            abortController.abort();
         };
-        reader.onload = async () => {
-            loadingCard.remove();
-            const base64 = reader.result.split(',')[1];
-            await onLoaded(file, base64);
+
+        const onProgress = (percent) => {
+            const p = Math.round(percent * 100);
+            progressBar.value = percent;
+            progressBar.indeterminate = false;
+            progressText.textContent = `Uploading... ${p}%`;
         };
-        reader.readAsDataURL(file);
+
+        try {
+            await onSelected(file, onProgress, abortController.signal);
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                toast('Upload cancelled');
+            } else {
+                toast(`Error: ${err.message}`);
+            }
+        } finally {
+            loadingCard.remove();
+        }
     };
     input.click();
 }
 
 async function uploadAndLoadModule() {
-    handleFileUpload('.kpm', 'kpm-list', async (file, base64) => {
+    handleFileUpload('.kpm', 'kpm-list', async (file, onProgress, signal) => {
+        const tmpPath = `${modDir}/tmp/${file.name}`;
         try {
-            const result = await exec(`
-                mkdir -p ${modDir}/tmp
-                rm -rf ${modDir}/tmp/*
-                echo '${base64}' | base64 -d > ${modDir}/tmp/${file.name}
-            `);
-            if (result.errno !== 0) {
-                toast(`Failed to write file: ${result.stderr}`);
-                return;
-            }
-
-            const info = await getKpmInfo(`${modDir}/tmp/${file.name}`);
+            await exec(`mkdir -p ${modDir}/tmp && rm -rf ${modDir}/tmp/*`);
+            await uploadFile(file, tmpPath, onProgress, signal);
+            const info = await getKpmInfo(tmpPath);
             if (info && info.name) {
                 const dialog = document.getElementById('load-dialog');
                 dialog.querySelector('#module-name').textContent = info.name;
@@ -241,7 +287,8 @@ async function uploadAndLoadModule() {
                 exec(`rm -rf ${modDir}/tmp`);
             }
         } catch (e) {
-            toast(`Error: ${e.message}`);
+            exec(`rm -rf ${modDir}/tmp`);
+            throw e;
         }
     });
 }
@@ -285,4 +332,4 @@ export function initKPMPage() {
     refreshKpmList();
 }
 
-export { loadModule, refreshKpmList, uploadAndLoadModule, handleFileUpload }
+export { loadModule, refreshKpmList, uploadAndLoadModule, handleFileUpload, uploadFile }

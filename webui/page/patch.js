@@ -1,6 +1,6 @@
 import { exec, spawn, toast } from 'kernelsu-alt';
 import { modDir, superkey } from '../index.js';
-import { handleFileUpload } from './kpm.js';
+import { handleFileUpload, uploadFile } from './kpm.js';
 
 function uInt2String(ver) {
     const val = typeof ver === 'string' ? parseInt(ver, 16) : ver;
@@ -198,7 +198,7 @@ function renderKpmList() {
         card.className = 'card module-card';
         card.innerHTML = `
             <div class="module-card-header">
-                <div class="tag-wrapper">
+                <div class="flex-header">
                     <div class="module-card-title">${item.name}</div>
                     ${isNew ? '' : '<div class="tag">EMBEDDED</div>'}
                 </div>
@@ -267,15 +267,16 @@ function openOptionDialog(item) {
 }
 
 async function embedKPM() {
-    handleFileUpload('.kpm', 'kpm-embed-list', async (file, base64) => {
+    handleFileUpload('.kpm', 'kpm-embed-list', async (file, onProgress, signal) => {
         // Generate random filename
         const randName = Math.random().toString(36).substring(7) + '.kpm';
         const tmpPath = `${modDir}/tmp/${randName}`;
-        const writeResult = await exec(`echo '${base64}' | base64 -d > ${tmpPath}`);
 
-        if (writeResult.errno) {
-            toast("Failed to upload KPM file");
-            return;
+        try {
+            await uploadFile(file, tmpPath, onProgress, signal);
+        } catch (e) {
+            exec(`rm -f ${tmpPath}`);
+            throw e;
         }
 
         const result = await exec(`kptools -l -M "${randName}"`, {
