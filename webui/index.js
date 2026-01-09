@@ -40,16 +40,22 @@ async function updateStatus() {
     }
 }
 
+export function escapeShell(cmd) {
+    if (cmd === '' || cmd === null || cmd === undefined) return "''";
+    return "'" + String(cmd).replace(/'/g, "'\\''") + "'";
+}
+
 function updateSuperkey(key) {
     superkey = key;
     document.querySelectorAll('.password-field').forEach(field => {
         field.value = key;
     });
     localStorage.setItem('kp-next_superkey', key);
+    const safeKey = escapeShell(key);
     exec(`
-        key="${key}"
+        key=${safeKey}
         if [ -n "$key" ]; then
-            echo '${key}' | base64 -w0 > /data/adb/kp-next/key
+            printf "%s" "$key" | base64 -w0 > /data/adb/kp-next/key
             if [ -f "${modDir}/unresolved" ]; then
                 rm -f "${modDir}/unresolved"
                 busybox nohup sh "${modDir}/service.sh" &

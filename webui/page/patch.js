@@ -1,5 +1,5 @@
 import { exec, spawn, toast } from 'kernelsu-alt';
-import { modDir, superkey } from '../index.js';
+import { modDir, superkey, escapeShell } from '../index.js';
 import { handleFileUpload, uploadFile } from './kpm.js';
 import { getString } from '../language.js';
 
@@ -39,9 +39,9 @@ function parseIni(str) {
 async function getInstalledVersion() {
     if (superkey === '') return null;
     if (import.meta.env.DEV) return uInt2String('c06');
-    const working = await exec(`kpatch '${superkey}' hello`, { env: { PATH: `${modDir}/bin` } });
+    const working = await exec(`kpatch ${escapeShell(superkey)} hello`, { env: { PATH: `${modDir}/bin` } });
     if (working.stdout.trim() === '') return null;
-    const version = await exec(`kpatch '${superkey}' kpver`, { env: { PATH: `${modDir}/bin` } });
+    const version = await exec(`kpatch ${escapeShell(superkey)} kpver`, { env: { PATH: `${modDir}/bin` } });
     return uInt2String(version.stdout.trim());
 }
 
@@ -337,7 +337,7 @@ function patch(type) {
     if (type === "patch") {
         args.push(
             `${modDir}/boot_patch.sh`,
-            `'${superkeyVal}'`,
+            escapeShell(superkeyVal),
             bootDev,
             'true'
         );
@@ -345,7 +345,7 @@ function patch(type) {
         // New kpm
         newExtras.forEach(extra => {
             args.push('-M', `${modDir}/tmp/${extra.fileName}`);
-            if (extra.args) args.push('-A', extra.args);
+            if (extra.args) args.push('-A', escapeShell(extra.args));
             if (extra.event) args.push('-V', extra.event);
             args.push('-T', 'kpm');
         });
@@ -353,7 +353,7 @@ function patch(type) {
         // Embeded kpm
         existedExtras.forEach(extra => {
             args.push('-E', extra.name);
-            if (extra.args) args.push('-A', extra.args);
+            if (extra.args) args.push('-A', escapeShell(extra.args));
             if (extra.event) args.push('-V', extra.event);
             args.push('-T', 'kpm');
         });
