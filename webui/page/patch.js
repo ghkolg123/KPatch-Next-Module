@@ -93,17 +93,25 @@ async function parseBootimg() {
         return;
     }
 
-    const result = await exec(`kptools -l -i kernel`, {
+    let stdout = '', stderr = '';
+    const result = spawn('kptools', ['-l', '-i', 'kernel'], {
         cwd: `${modDir}/tmp`,
         env: { PATH: `${modDir}/bin:${modDir}/tmp:$PATH` }
     });
 
-    if (result.errno) {
-        toast(getString('msg_failed_parse_kernel', result.stderr));
+    result.stdout.on('data', (data) => stdout += data + '\n');
+    result.stderr.on('data', (data) => stderr += data);
+
+    const errno = await new Promise((resolve) => {
+        result.on('exit', (code) => resolve(code));
+    });
+
+    if (errno !== 0) {
+        toast(getString('msg_failed_parse_kernel', stderr));
         return;
     }
 
-    const ini = parseIni(result.stdout);
+    const ini = parseIni(stdout);
 
     if (ini.kernel) {
         kimgInfo.banner = ini.kernel.banner;
@@ -152,25 +160,36 @@ async function extractAndParseBootimg() {
     }
 
     // Prepare work directory
-    await exec(`mkdir -p ${modDir}/tmp && rm -rf ${modDir}/tmp/* && cp ${modDir}/bin/kpimg ${modDir}/tmp/`);
+    const prepare = spawn(`mkdir -p ${modDir}/tmp && rm -rf ${modDir}/tmp/* && cp ${modDir}/bin/kpimg ${modDir}/tmp/`);
+    await new Promise((resolve) => {
+        prepare.on('exit', () => resolve());
+    });
 
     // get slot and device
-    const result = await exec(`busybox sh ${modDir}/boot_extract.sh`, {
+    const result = spawn('busybox', ['sh', `${modDir}/boot_extract.sh`], {
         env: { PATH: `${modDir}/bin:/data/adb/ksu/bin:/data/adb/magisk:$PATH`, ASH_STANDALONE: '1' }
     });
 
-    if (result.errno && !import.meta.env.DEV) {
-        toast(getString('msg_boot_extract_failed'), result.stderr);
+    result.stdout.on('data', (data) => {
+        if (data.match(/SLOT=(.*)/)) {
+            bootSlot = data.match(/SLOT=(.*)/)[1].trim();
+        } else if (data.match(/BOOTIMAGE=(.*)/)) {
+            bootDev = data.match(/BOOTIMAGE=(.*)/)[1].trim();
+        }
+    });
+
+    let stderr = '';
+    result.stderr.on('data', (data) => stderr += data);
+
+    const errno = await new Promise((resolve) => {
+        result.on('exit', (code) => resolve(code));
+    });
+
+    if (errno !== 0 && !import.meta.env.DEV) {
+        toast(getString('msg_boot_extract_failed'), stderr);
         document.getElementById('bootimg-device').textContent = getString('msg_failed_locate_boot');
         return;
     }
-
-    const output = result.stdout;
-    const matchSlot = output.match(/SLOT=(.*)/);
-    const matchBoot = output.match(/BOOTIMAGE=(.*)/);
-
-    bootSlot = matchSlot ? matchSlot[1].trim() : '';
-    bootDev = matchBoot ? matchBoot[1].trim() : '';
 
     // Bootimg info card
     document.getElementById('bootimg-slot').textContent = bootSlot ? getString('info_slot', bootSlot) : '';
