@@ -660,7 +660,7 @@ md-menu-item label {
 }
 
 .dialog-wrapper {
-    z-index: 5;
+    z-index: 15;
     position: relative;
 }
 
